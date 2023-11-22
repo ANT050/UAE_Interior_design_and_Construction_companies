@@ -1,3 +1,5 @@
+import re
+
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -24,7 +26,7 @@ def fetch_html_content(url: str, headers: dict) -> BeautifulSoup | None:
         return None
 
 
-def go_to_another_page(url: str, headers: dict):
+def go_to_another_page(url: str, headers: dict) -> str | None:
     soup = fetch_html_content(url, headers)
     next_link = soup.find('a', class_='nextpostslink')
     if next_link:
@@ -38,12 +40,10 @@ def get_company_data(url: str, headers: dict) -> list:
     companys_data = []
 
     while url:
-
         soup = fetch_html_content(url, headers)
         companys_description = soup.find_all(class_='post-list-content')
 
         for company in companys_description:
-            count = 1
             company_text = company.find('p').text
             companys_data.append(company_text)
 
@@ -52,7 +52,37 @@ def get_company_data(url: str, headers: dict) -> list:
     return companys_data
 
 
-def main():
+def company_data_formatting(company_data: list) -> list:
+    result_list = []
+
+    for company in company_data:
+        parts = re.split(r'\b(Company Name|'
+                         r'Address|'
+                         r'PO Box|'
+                         r'Phone|'
+                         r'Fax|'
+                         r'Email|'
+                         r'Website|'
+                         r'Business Activity|'
+                         r'Nature of Business)\b', company)
+
+        company_dict = {}
+        for i in range(1, len(parts), 2):
+            key = parts[i].strip()
+            value = parts[i + 1].strip(': ').replace('\n', '')
+            company_dict[key] = value
+
+        result_list.append(company_dict)
+
+    return result_list
+
+
+def write_to_json(data: list, filename: str) -> None:
+    with open(filename, 'w', encoding='utf-8') as json_file:
+        json.dump(data, json_file, ensure_ascii=False, indent=4)
+
+
+def main() -> None:
     base_url = 'https://www.uaecontact.com/?s=interior+Design'
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
@@ -60,10 +90,15 @@ def main():
         'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
     }
 
-    data = get_company_data(base_url, headers)
+    company_data = get_company_data(base_url, headers)
+    data_formatting = company_data_formatting(company_data)
 
-    for i in data:
-        print(i)
+    write_to_json(data_formatting, 'design_and_construction_companies.json')
+
+    count = 1
+    for i in data_formatting:
+        print(f'{count}. {i}')
+        count += 1
 
 
 if __name__ == '__main__':
