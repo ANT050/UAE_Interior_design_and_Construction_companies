@@ -52,7 +52,7 @@ def get_company_data(url: str, headers: dict) -> list:
     return companys_data
 
 
-def company_data_formatting(company_data: list) -> list:
+def company_data_formatting(company_data: list):
     result_list = []
 
     for company in company_data:
@@ -60,6 +60,7 @@ def company_data_formatting(company_data: list) -> list:
                          r'Address|'
                          r'PO Box|'
                          r'Phone|'
+                         r'Tel|'
                          r'Fax|'
                          r'Email|'
                          r'Website|'
@@ -82,6 +83,28 @@ def write_to_json(data: list, filename: str) -> None:
         json.dump(data, json_file, ensure_ascii=False, indent=4)
 
 
+def write_to_csv(data: list, filename: str) -> None:
+    df = pd.DataFrame(data)
+
+    df = df.sort_values(by='Company Name')
+    df['Phone'] = df['Phone'].fillna('') + df['Tel'].fillna('')
+    df = df.drop(columns=['Tel'])
+    df['Business Activity'] = df['Business Activity'].fillna('') + df['Nature of Business'].fillna('')
+    df = df.drop(columns=['Nature of Business'])
+
+    df.columns = [
+        'Company Name',
+        'Address',
+        'PO Box',
+        'Phone',
+        'Fax',
+        'Email',
+        'Website',
+        'Business Activity',
+    ]
+    df.to_csv(filename, index=False)
+
+
 def main() -> None:
     base_url = 'https://www.uaecontact.com/?s=interior+Design'
     headers = {
@@ -93,12 +116,8 @@ def main() -> None:
     company_data = get_company_data(base_url, headers)
     data_formatting = company_data_formatting(company_data)
 
+    write_to_csv(data_formatting, 'design_and_construction_companies.csv')
     write_to_json(data_formatting, 'design_and_construction_companies.json')
-
-    count = 1
-    for i in data_formatting:
-        print(f'{count}. {i}')
-        count += 1
 
 
 if __name__ == '__main__':
