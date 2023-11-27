@@ -1,58 +1,63 @@
+import asyncio
 import re
-
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
 import json
+from typing import Optional, List
+import aiohttp
+import pandas as pd
+from bs4 import BeautifulSoup
+
+BASE_URL = 'https://www.uaecontact.com/?s=interior+Design'
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+}
 
 
-def fetch_html_content(url: str, headers: dict) -> BeautifulSoup | None:
+async def fetch_html_content(session: aiohttp.ClientSession, url: str) -> Optional[BeautifulSoup]:
     try:
-        response = requests.get(url, headers=headers)
-
-        if response.status_code == 200:
-            html_content = response.text
-            soup = BeautifulSoup(html_content, 'lxml')
-
-            return soup
-        else:
-            print(f"Ошибка: {response.status_code}")
-
-            return None
-
-    except Exception:
-        print("Ошибка: Неправильно указан URL")
-
+        async with session.get(url, headers=HEADERS) as response:
+            if response.status == 200:
+                html_content = await response.text()
+                soup = BeautifulSoup(html_content, 'lxml')
+                return soup
+            else:
+                print(f"Ошибка: {response.status}")
+                return None
+    except Exception as e:
+        print(f"Ошибка: {e}")
         return None
 
 
-def go_to_another_page(url: str, headers: dict) -> str | None:
-    soup = fetch_html_content(url, headers)
+async def go_to_another_page(session: aiohttp.ClientSession, url: str) -> Optional[str]:
+    soup = await fetch_html_content(session, url)
     next_link = soup.find('a', class_='nextpostslink')
     if next_link:
-        url = next_link['href']
-        return url
+        return next_link['href']
     else:
         return None
 
 
-def get_company_data(url: str, headers: dict) -> list:
-    companys_data = []
+async def get_company_data(session: aiohttp.ClientSession, url: str) -> List[str]:
+    companies_data = []
 
     while url:
-        soup = fetch_html_content(url, headers)
-        companys_description = soup.find_all(class_='post-list-content')
+        soup = await fetch_html_content(session, url)
+        companies_description = soup.find_all(class_='post-list-content')
 
-        for company in companys_description:
+        for company in companies_description:
             company_text = company.find('p').text
-            companys_data.append(company_text)
 
-        url = go_to_another_page(url, headers)
+            print(company_text)
 
-    return companys_data
+            companies_data.append(company_text)
+
+        url = await go_to_another_page(session, url)
+
+    return companies_data
 
 
-def company_data_formatting(company_data: list):
+def company_data_formatting(company_data: List[str]) -> List[dict]:
     result_list = []
 
     for company in company_data:
@@ -78,12 +83,12 @@ def company_data_formatting(company_data: list):
     return result_list
 
 
-def write_to_json(data: list, filename: str) -> None:
+def write_to_json(data: List[dict], filename: str) -> None:
     with open(filename, 'w', encoding='utf-8') as json_file:
         json.dump(data, json_file, ensure_ascii=False, indent=4)
 
 
-def write_to_csv(data: list, filename: str) -> None:
+def write_to_csv(data: List[dict], filename: str) -> None:
     df = pd.DataFrame(data)
 
     df = df.sort_values(by='Company Name')
@@ -105,15 +110,10 @@ def write_to_csv(data: list, filename: str) -> None:
     df.to_csv(filename, index=False)
 
 
-def main() -> None:
-    base_url = 'https://www.uaecontact.com/?s=interior+Design'
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-    }
+async def main() -> None:
+    async with aiohttp.ClientSession() as session:
+        company_data = await get_company_data(session, BASE_URL)
 
-    company_data = get_company_data(base_url, headers)
     data_formatting = company_data_formatting(company_data)
 
     write_to_csv(data_formatting, 'design_and_construction_companies.csv')
@@ -121,4 +121,4 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
